@@ -1,20 +1,9 @@
-import {
-  KubeConfig,
-  Watch,
-  ListWatch,
-  CoreV1Api,
-} from "@kubernetes/client-node"
 import http, { ServerResponse } from "http"
 import httpProxy from "http-proxy"
+import watcher from "./podWatch"
 
-const PORT = 9000
 const HEADER_NAME = process.env.HEADER_NAME || "x-auth-request-user"
-const POD_NAME_SELECTOR = process.env.POD_NAME_SELECTOR || "stateful-dpl"
-
-const kc = new KubeConfig()
-kc.loadFromDefault()
-const k8sApi = kc.makeApiClient(CoreV1Api)
-k8sApi.listPodForAllNamespaces()
+const PORT = 9000
 
 export interface RegisteredPods {
   [key: string]: RegisteredPod
@@ -30,8 +19,10 @@ export interface Sessions {
   [key: string]: string
 }
 
-const pods: RegisteredPods = {}
+export const pods: RegisteredPods = {}
 const sessions: Sessions = {}
+
+watcher()
 
 function nbSessions(podName) {
   return Object.keys(sessions).filter((key) => sessions[key] == podName).length
@@ -105,35 +96,3 @@ var server = http.createServer(function (req, res) {
 
 console.log(`listening on port ${PORT}`)
 server.listen(PORT)
-
-const listFn = () => k8sApi.listPodForAllNamespaces()
-
-const path = "/api/v1/pods"
-const watch = new Watch(kc)
-const listWatch = new ListWatch(path, watch, listFn)
-
-listWatch.on("delete", (pod) => {
-  if (pods[pod.metadata.name]) {
-    console.log('Deleting', pod.metadata.name)
-    delete pods[pod.metadata.name]
-    console.log(pods)
-  }
-})
-listWatch.on("add", (pod) => {
-  updatePod(pod)
-})
-listWatch.on("update", (pod) => {
-  updatePod(pod)
-})
-
-function updatePod(pod) {
-  if (pod.metadata.name.indexOf(POD_NAME_SELECTOR) > -1) {
-    console.log('Updating', pod.metadata.name)
-    pods[pod.metadata.name] = {
-      ip: pod.status.podIP,
-      status: pod.status.phase,
-      port: pod?.spec?.containers[0].ports[0].containerPort,
-    }
-    console.log(pods)
-  }
-}
