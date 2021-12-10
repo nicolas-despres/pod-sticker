@@ -1,8 +1,8 @@
-import http, { ServerResponse } from "http"
+import http, { ServerResponse, IncomingMessage } from "http"
 import httpProxy from "http-proxy"
 import watcher from "./podWatch"
 
-const HEADER_NAME = process.env.HEADER_NAME || "x-auth-request-user"
+const COOKIE_NAME = process.env.COOKIE_NAME
 const PORT = 9000
 
 export interface RegisteredPods {
@@ -22,6 +22,12 @@ export interface Sessions {
 export const pods: RegisteredPods = {}
 const sessions: Sessions = {}
 
+//Use below snippet to debug the proxy
+/*pods["localhost"] = {
+  status: "Running",
+  ip: "localhost",
+  port: 8080,
+}*/
 watcher()
 
 function nbSessions(podName) {
@@ -39,7 +45,41 @@ function getAvailablePodKey(): string {
 }
 var proxy = httpProxy.createProxyServer({})
 
-function sendPodAvailable(res: ServerResponse) {
+function parseCookies(request: IncomingMessage): object {
+  var list = {},
+    rc = request.headers.cookie
+
+  rc &&
+    rc.split(";").forEach(function (cookie) {
+      var parts = cookie.split("=")
+      list[parts.shift().trim()] = decodeURI(parts.join("="))
+    })
+
+  return list
+}
+
+proxy.on(
+  "proxyRes",
+  function (
+    proxyRes: IncomingMessage,
+    req: IncomingMessage,
+    res: ServerResponse
+  ) {
+    const cookies = parseCookies(req)
+    const affinityCookie = cookies[COOKIE_NAME]
+    const server = req.headers[COOKIE_NAME]
+    if (server && affinityCookie !== server) {
+      const setCookieInstruction = `${COOKIE_NAME}=${server}; Path=/`
+      if (proxyRes.headers["set-cookie"]) {
+        proxyRes.headers["set-cookie"].push(setCookieInstruction)
+      } else {
+        proxyRes.headers["set-cookie"] = [setCookieInstruction]
+      }
+    }
+  }
+)
+
+function sendNoPodAvailable(res: ServerResponse) {
   console.error("no pod available")
   res.writeHead(503, { "Content-Type": "text/plain" })
   res.write("no pod available")
@@ -47,51 +87,35 @@ function sendPodAvailable(res: ServerResponse) {
 }
 
 var server = http.createServer(function (req, res) {
-  const header = req?.headers[HEADER_NAME]
-  if (header) {
-    const sessionKey: string = header.toString()
-    if (!sessions[sessionKey]) {
-      const targetPod = getAvailablePodKey()
-      if (!targetPod) {
-        sendPodAvailable(res)
-        return
-      }
-      if (process.env.NODE_ENV == "development") {
-        console.log(`Creating a session for ${sessionKey} on ${targetPod}`)
-      }
-      sessions[sessionKey] = targetPod
-    }
-    if (!pods[sessions[sessionKey]]) {
-      const targetPod = getAvailablePodKey()
-      if (!targetPod) {
-        sendPodAvailable(res)
-        return
-      }
-      console.error("Pod not available anymore", sessions[sessionKey])
-      console.log(`Assign a new pod for ${sessionKey} on ${targetPod}`)
-      sessions[sessionKey] = targetPod
-    }
-    try {
-      const pod = pods[sessions[sessionKey]]
-      const target = `http://${pod.ip}:${pod.port}`
-      console.log("routing", sessionKey, "to", target)
-      proxy.web(req, res, {
-        target,
-      })
-    } catch (e) {
-      console.error(e)
+  // Routing based on affinity cookie
+  const cookies = req?.headers["cookie"]?.split("; ") || []
+  const cookie = cookies.find((name) => name.startsWith(COOKIE_NAME))
+  let pod: RegisteredPod
+  if (cookie) {
+    const podAffinity = cookie.split("=")[1]
+    pod = pods[podAffinity]
+    if (pod && process.env.NODE_ENV !== "production") {
+      console.log(`Routing ${podAffinity} to`, pod)
     }
   } else {
-    const msg = "Missing header: " + HEADER_NAME
-    console.error(msg)
-    const targetPod = getAvailablePodKey()
-    const pod = pods[targetPod]
-    const target = `http://${pod.ip}:${pod.port}`
-    console.log("routing unknown user to", target)
-      proxy.web(req, res, {
-        target,
-      })
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`Cookie not found`, cookies)
+    }
   }
+  if (!pod || pod.status !== "Running") {
+    const targetPod = getAvailablePodKey()
+    pod = pods[targetPod]
+    req.headers[COOKIE_NAME] = targetPod
+    console.log("routing new session to", targetPod)
+  }
+  if (!pod || pod.status !== "Running") {
+    sendNoPodAvailable(res)
+    return
+  }
+  const target = `http://${pod.ip}:${pod.port}`
+  proxy.web(req, res, {
+    target,
+  })
 })
 
 console.log(`listening on port ${PORT}`)
