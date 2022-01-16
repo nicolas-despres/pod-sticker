@@ -28,6 +28,7 @@ metadata:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '3500'
 spec:
+  serviceAccountName: pod-reader-account
   replicas: 1
   selector:
     matchLabels:

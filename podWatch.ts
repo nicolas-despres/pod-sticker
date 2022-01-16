@@ -4,16 +4,22 @@ import {
   ListWatch,
   CoreV1Api,
 } from "@kubernetes/client-node"
+import { exit } from "process"
+import { pods } from "./server"
 
 const POD_NAME_SELECTOR = process.env.POD_NAME_SELECTOR || "stateful-dpl"
-import { pods } from "./server"
+const NAMESPACE = process.env.NAMESPACE || 'default'
 
 const kc = new KubeConfig()
 kc.loadFromDefault()
 const k8sApi = kc.makeApiClient(CoreV1Api)
-k8sApi.listPodForAllNamespaces()
 
-const listFn = () => k8sApi.listPodForAllNamespaces()
+const listFn = () => {
+  return k8sApi.listNamespacedPod(NAMESPACE).catch((e)=>{
+    console.error(e)
+    exit(1)
+  })
+}
 
 const path = "/api/v1/pods"
 const watch = new Watch(kc)
