@@ -28,7 +28,6 @@ metadata:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '3500'
 spec:
-  serviceAccountName: pod-reader-account
   replicas: 1
   selector:
     matchLabels:
@@ -40,6 +39,7 @@ spec:
         tier: webserver
         app: wydeweb-proxy
     spec:
+      serviceAccountName: pod-reader-account
       imagePullSecrets:
        - name: wyn-acr-secret
       containers:
@@ -51,6 +51,8 @@ spec:
           value: "production"
         - name: POD_NAME_SELECTOR
           value: "wynsure-dpl"
+        - name: COOKIE_NAME
+          value: affinity-wynsure
         ports:
            - name: http-front
              containerPort: 9000
