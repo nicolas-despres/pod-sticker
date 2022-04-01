@@ -1,10 +1,14 @@
+---
+title: Pod Sticker
+--- 
+
 # pod-sticker
 
 ## Why Pod-Sticker?
-The 12 factors methodology and most of modern cloud architecture best practices rely on application being stateless:
+The [12 factors methodology](https://12factor.net/) and most of modern cloud architecture best practices rely on application being stateless:
 > Sticky sessions are a violation of twelve-factor and should never be used or relied upon
 
-That is a fair statement and I can understand the rational behind it but sometimes this is simply something we cannot change. Also stickyness and sessions can bring a lot of value in term of performance. How can we bring **stickynes**s into a container based deployment such as kubernetes?
+That is a fair statement and I can understand the rational behind it but sometimes this is simply something we cannot change. Also stickyness and sessions can bring a lot of value in term of performance. How can we bring **stickynes** into a container based deployment such as kubernetes?
 
 **pod-sticker** add `stickyness` to your **pods** by:
 - keeping a list of active pods matching `POD_NAME_SELECTOR` by watching kubernetes events
