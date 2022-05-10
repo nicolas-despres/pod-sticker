@@ -6,20 +6,19 @@
   "scripts": {
     "build": "tsc --project ./",
     "dev": "nodemon server.ts",
-    "start": "node ./build/server.js",
-    "apply:stateful": "kubectl apply -f ./manifests/stateful/deployment.yaml&&kubectl apply -f ./manifests/stateful/ingress.yaml",
-    "apply:wydeweb": "kubectl apply -f ./manifests/wydeweb/deployment.yaml&&kubectl apply -f ./manifests/wydeweb/ingress.yaml"
+    "start": "node ./build/server.js"
   },
   "author": "mphasis wyde",
   "license": "mphasis wyde",
   "dependencies": {
     "@kubernetes/client-node": "^0.15.1",
-    "http-proxy": "^1.17.0"
+    "http-proxy": "^1.17.0",
+    "winston": "^3.7.2"
   },
   "devDependencies": {
-    "@types/express": "^4.17.11",
+    "@types/http-proxy": "^1.17.8",
     "@types/node": "^15.6.0",
-    "nodemon": "^2.0.7",
+    "nodemon": "^2.0.15",
     "ts-node": "^10.0.0",
     "typescript": "^4.2.4"
   }

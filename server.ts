@@ -3,6 +3,7 @@ import httpProxy from "http-proxy"
 import RegisteredPod from "./RegisteredPod"
 export const pods: Map<string, RegisteredPod> = new Map()
 import watcher from "./podWatch"
+import logger from "./logger"
 
 const COOKIE_NAME = process.env.COOKIE_NAME || 'wydeweb'
 const PORT = 9000
@@ -17,17 +18,16 @@ pods["localhost"] = {
 }*/
 watcher()
 
-
 require("process").on("uncaughtException", (e) => {
-  console.error(e)
+  logger.error(e)
 })
 
-function getAvailablePod(): RegisteredPod {
+function getAvailablePod(): RegisteredPod | undefined {
   return [...pods.entries()].map(value => value[1])
     .filter((pod) => pod.running)
     .sort((a, b) => a.nbSessions - b.nbSessions)[0]
-
 }
+
 var proxy = httpProxy.createProxyServer({})
 
 function parseCookies(request: IncomingMessage): object {
@@ -45,15 +45,15 @@ function parseCookies(request: IncomingMessage): object {
 
 // Listen for the `error` event on `proxy`.
 proxy.on('error', function (err, req, res: ServerResponse) {
-  console.error(err)
   res.writeHead(500, {
     'Content-Type': 'text/plain'
-  });
+  })
 
-  res.end('Uoh! Something went wrong. ' + err?.message + " " + err.name);
-});
+  logger.error(err.message, { client: req.headers["x-auth-request-user"] })
+  res.end('Uoh! Something went wrong. ' + err?.message + " " + err.name)
+})
 
-COOKIE_NAME && proxy.on(
+proxy.on(
   "proxyRes",
   (
     proxyRes: IncomingMessage,
@@ -75,7 +75,7 @@ COOKIE_NAME && proxy.on(
 )
 
 function sendNoPodAvailable(res: ServerResponse) {
-  console.error("no pod available")
+  logger.error("No pod available", { code: 503 })
   res.writeHead(503, { "Content-Type": "text/plain" })
   res.write("no pod available")
   res.end()
@@ -85,47 +85,43 @@ function newSessionId(): string {
   return (Math.random() + 1).toString(36).substring(7)
 }
 
-var server = http.createServer(function (req, res) {
-  if (COOKIE_NAME) {
-    // Routing based on affinity cookie
-    const cookies = req?.headers["cookie"]?.split("; ") || []
-    const cookie = cookies.find((name) => name.startsWith(COOKIE_NAME))
-    let pod: RegisteredPod
-    if (cookie) {
-      const podAffinity = cookie.split("=")[1]
-      pod = pods.get(podAffinity)
-      if (pod && process.env.NODE_ENV !== "production") {
-        console.log(`Routing ${podAffinity} to`, pod)
-      }
-    } else {
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`Cookie not found`, cookies)
-      }
-    }
-    if (!pod || !pod.running) {
-      pod = getAvailablePod()
-      req.headers[COOKIE_NAME] = pod.name
-      const sessionId = req.headers["x-auth-request-user"] || newSessionId()
-      console.log(`routing new session for ${sessionId} to ${pod.name}`)
-      pod.registerSession(sessionId.toString())
-    }
-    if (!pod || !pod.running) {
-      sendNoPodAvailable(res)
-      return
-    }
-    const target = `http://${pod.ip}:${pod.port}`
+var server = http.createServer(async function (req, res) {
 
-    proxy.web(req, res, {
-      target,
-    }, function (err: any) {
-      console.error(err)
-      res.writeHead(500, { "Content-Type": "text/plain" })
-      res.write("No response from server", err?.code, err?.message)
-      res.end()
-    })
+  // Routing based on affinity cookie
+  const cookies = req?.headers["cookie"]?.split("; ") || []
+  const affinityCookie = cookies.find((name) => name.startsWith(COOKIE_NAME))
+  let pod: RegisteredPod
+
+  if (affinityCookie) {
+    const podAffinity = affinityCookie.split("=")[1]
+    pod = pods.get(podAffinity)
   }
+
+  const sessionId = req.headers["x-auth-request-user"] || newSessionId()
+  if (!pod || !pod.running) {
+    pod = getAvailablePod()
+    if (pod) {
+      req.headers[COOKIE_NAME] = pod.name
+      logger.info(`routing new session for ${sessionId} to ${pod.name}`, { client: sessionId })
+      await pod.registerSession(sessionId.toString())
+    }
+  }
+  if (!pod || !pod.running) {
+    sendNoPodAvailable(res)
+    return
+  }
+  const target = `http://${pod.ip}:${pod.port}`
+
+  proxy.web(req, res, {
+    target,
+  }, function (err: any) {
+    logger.error(`Could not get a response from ${pod?.name} "${err.message}"`, { client: sessionId, stack: "proxy.web" })
+    res.writeHead(500, { "Content-Type": "text/plain" })
+    res.write("No response from server", err?.code, err?.message)
+    res.end()
+  })
 
 })
 
-console.log(`listening on port ${PORT}`)
+logger.info(`listening on port ${PORT}`)
 server.listen(PORT)

@@ -1,11 +1,11 @@
 #############################################################
-######################### wydeweb-proxy #########################
+######################### app-proxy #########################
 
-# Service exposing wydeweb-proxy service on node port 3000
+# Service exposing app-proxy service on node port 3000
 apiVersion: v1
 kind: Service
 metadata:
-  name: wydeweb-proxy
+  name: app-proxy
   annotations:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '3500'
@@ -13,17 +13,17 @@ spec:
   type: ClusterIP
   selector:
     tier: webserver
-    app: wydeweb-proxy
+    app: app-proxy
   ports:
   - port: 3000
     name: http-fr
     targetPort: http-front
 ---
-# deployment of the container wydeweb-proxy listening to port 3500
+# deployment of the container app-proxy listening to port 3500
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: wydeweb-proxy
+  name: app-proxy
   annotations:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '3500'
@@ -32,27 +32,25 @@ spec:
   selector:
     matchLabels:
       tier: webserver
-      app: wydeweb-proxy
+      app: app-proxy
   template:
     metadata:
       labels:
         tier: webserver
-        app: wydeweb-proxy
+        app: app-proxy
     spec:
       serviceAccountName: pod-reader-account
-      imagePullSecrets:
-       - name: wyn-acr-secret
       containers:
-      - name: wydeweb-proxy
-        image: wynsurek8sacr.azurecr.io/pod-sticker:latest
+      - name: app-proxy
+        image: nicolasdespres/podsticker:1
         imagePullPolicy: Always
         env:
         - name: NODE_ENV
           value: "production"
         - name: POD_NAME_SELECTOR
-          value: "wynsure-dpl"
+          value: "app-dpl"
         - name: COOKIE_NAME
-          value: affinity-wynsure
+          value: affinity-app
         ports:
            - name: http-front
              containerPort: 9000
