@@ -2,13 +2,18 @@ name: Release
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: name/app
     - name: Use Node.js 14
       uses: actions/setup-node@v2
       with:
@@ -19,8 +24,11 @@ jobs:
       with:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Build the Docker image # push The image to the docker hub
-      run: docker build . --file ./Dockerfile --tag ${{ secrets.DOCKER_USER }}/podsticker:${{ steps.meta.outputs.tags }}
-    - name: Docker Push
-      run: docker push ${{ secrets.DOCKER_USER }}/podsticker:${{ steps.meta.outputs.tags }}
+    - name: Build and push
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
 
