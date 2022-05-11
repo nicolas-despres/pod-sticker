@@ -13,7 +13,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v4
       with:
-        images: name/app
+        images: ${{ secrets.DOCKER_USER }}/pod-sticker
     - name: Use Node.js 14
       uses: actions/setup-node@v2
       with:
