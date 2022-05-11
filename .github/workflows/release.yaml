@@ -20,7 +20,6 @@ jobs:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     - name: Build the Docker image # push The image to the docker hub
-      working-directory: client
       run: docker build . --file ./Dockerfile --tag ${{ secrets.DOCKER_USER }}/podsticker:${{ steps.meta.outputs.tags }}
     - name: Docker Push
       run: docker push ${{ secrets.DOCKER_USER }}/podsticker:${{ steps.meta.outputs.tags }}
